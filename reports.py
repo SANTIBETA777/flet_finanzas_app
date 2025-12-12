@@ -1,109 +1,171 @@
+# reports.py
 import os
 from datetime import datetime
-from typing import List
-from models import Transaccion, Categoria
 from openpyxl import Workbook
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
+from models import obtener_transacciones
 
-# ---------------------------------------------------------
-# EXPORTAR A EXCEL
-# ---------------------------------------------------------
-def exportar_transacciones_excel(transacciones: List[Transaccion], ruta: str):
-    """
-    Exporta una lista de transacciones a un archivo Excel (.xlsx)
-    usando openpyxl.
-    """
+
+# ============================================================
+#   EXPORTAR HISTORIAL COMPLETO A EXCEL
+# ============================================================
+
+def exportar_historial_excel(ruta="reportes/historial.xlsx"):
+    trans = obtener_transacciones()
+
+    os.makedirs("reportes", exist_ok=True)
+
     wb = Workbook()
     ws = wb.active
-    ws.title = "Transacciones"
+    ws.title = "Historial"
 
-    # Encabezados
-    ws.append(["ID", "Tipo", "Monto", "Fecha", "Descripción", "Categoría"])
+    ws.append(["Fecha", "Tipo", "Monto", "Categoría", "Descripción"])
 
-    # Datos
-    for t in transacciones:
+    for t in trans:
         ws.append([
-            t.id,
+            t.fecha,
             t.tipo,
             t.monto,
-            t.fecha,
+            t.categoria_nombre or "—",
             t.descripcion,
-            t.categoria_nombre or "Sin categoría",
         ])
 
     wb.save(ruta)
     return ruta
 
 
-# ---------------------------------------------------------
-# EXPORTAR A PDF
-# ---------------------------------------------------------
-def exportar_transacciones_pdf(transacciones: List[Transaccion], ruta: str):
-    """
-    Exporta una lista de transacciones a un archivo PDF
-    usando reportlab.
-    """
+# ============================================================
+#   EXPORTAR INGRESOS/GASTOS POR RANGO DE FECHAS
+# ============================================================
+
+def exportar_por_rango_excel(fecha_desde, fecha_hasta, ruta="reportes/rango.xlsx"):
+    trans = obtener_transacciones()
+
+    filtradas = [
+        t for t in trans
+        if fecha_desde <= t.fecha <= fecha_hasta
+    ]
+
+    os.makedirs("reportes", exist_ok=True)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Rango"
+
+    ws.append(["Fecha", "Tipo", "Monto", "Categoría", "Descripción"])
+
+    for t in filtradas:
+        ws.append([
+            t.fecha,
+            t.tipo,
+            t.monto,
+            t.categoria_nombre or "—",
+            t.descripcion,
+        ])
+
+    wb.save(ruta)
+    return ruta
+
+
+# ============================================================
+#   EXPORTAR ESTADO DE CUENTA A EXCEL
+# ============================================================
+
+def exportar_estado_cuenta_excel(ruta="reportes/estado_cuenta.xlsx"):
+    trans = obtener_transacciones()
+
+    ingresos = sum(t.monto for t in trans if t.tipo == "ingreso")
+    gastos = sum(t.monto for t in trans if t.tipo == "gasto")
+    saldo = ingresos - gastos
+
+    os.makedirs("reportes", exist_ok=True)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Estado de Cuenta"
+
+    ws.append(["Concepto", "Valor"])
+    ws.append(["Total Ingresos", ingresos])
+    ws.append(["Total Gastos", gastos])
+    ws.append(["Saldo Actual", saldo])
+
+    wb.save(ruta)
+    return ruta
+
+
+# ============================================================
+#   EXPORTAR HISTORIAL A PDF (PROFESIONAL)
+# ============================================================
+
+def exportar_historial_pdf(ruta="reportes/historial.pdf"):
+    trans = obtener_transacciones()
+
+    os.makedirs("reportes", exist_ok=True)
+
     c = canvas.Canvas(ruta, pagesize=letter)
     width, height = letter
 
     c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, height - 50, "Reporte de Transacciones")
+    c.drawString(50, height - 50, "Historial de Transacciones")
 
     c.setFont("Helvetica", 10)
     y = height - 90
 
-    for t in transacciones:
-        linea = f"{t.fecha} | {t.tipo.upper()} | ${t.monto} | {t.descripcion} | {t.categoria_nombre}"
-        c.drawString(50, y, linea)
-        y -= 15
+    c.drawString(50, y, "Fecha")
+    c.drawString(120, y, "Tipo")
+    c.drawString(180, y, "Monto")
+    c.drawString(250, y, "Categoría")
+    c.drawString(350, y, "Descripción")
 
-        if y < 50:
+    y -= 20
+
+    for t in trans:
+        if y < 50:  # Nueva página
             c.showPage()
             c.setFont("Helvetica", 10)
             y = height - 50
+
+        c.drawString(50, y, t.fecha)
+        c.drawString(120, y, t.tipo)
+        c.drawString(180, y, f"${t.monto:.0f}")
+        c.drawString(250, y, t.categoria_nombre or "—")
+        c.drawString(350, y, t.descripcion[:40])
+
+        y -= 20
 
     c.save()
     return ruta
 
 
-# ---------------------------------------------------------
-# FILTROS DE EXPORTACIÓN
-# ---------------------------------------------------------
-def filtrar_transacciones(
-    transacciones: List[Transaccion],
-    fecha_inicio: str = None,
-    fecha_fin: str = None,
-    categoria_id: int = None,
-    tipo: str = None,
-):
-    """
-    Filtra transacciones por fecha, categoría o tipo.
-    """
-    resultado = transacciones
+# ============================================================
+#   EXPORTAR ESTADO DE CUENTA A PDF
+# ============================================================
 
-    if fecha_inicio:
-        resultado = [t for t in resultado if t.fecha >= fecha_inicio]
+def exportar_estado_cuenta_pdf(ruta="reportes/estado_cuenta.pdf"):
+    trans = obtener_transacciones()
 
-    if fecha_fin:
-        resultado = [t for t in resultado if t.fecha <= fecha_fin]
+    ingresos = sum(t.monto for t in trans if t.tipo == "ingreso")
+    gastos = sum(t.monto for t in trans if t.tipo == "gasto")
+    saldo = ingresos - gastos
 
-    if categoria_id:
-        resultado = [t for t in resultado if t.categoria_id == categoria_id]
+    os.makedirs("reportes", exist_ok=True)
 
-    if tipo:
-        resultado = [t for t in resultado if t.tipo == tipo]
+    c = canvas.Canvas(ruta, pagesize=letter)
+    width, height = letter
 
-    return resultado
+    c.setFont("Helvetica-Bold", 18)
+    c.drawString(50, height - 50, "Estado de Cuenta")
 
+    c.setFont("Helvetica", 12)
+    y = height - 100
 
-# ---------------------------------------------------------
-# GENERAR NOMBRE AUTOMÁTICO DE ARCHIVO
-# ---------------------------------------------------------
-def generar_nombre_archivo(prefijo: str, extension: str) -> str:
-    """
-    Genera un nombre de archivo único basado en fecha y hora.
-    """
-    fecha = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return f"{prefijo}_{fecha}.{extension}"
+    c.drawString(50, y, f"Total Ingresos: ${ingresos:,.0f}")
+    y -= 20
+    c.drawString(50, y, f"Total Gastos: ${gastos:,.0f}")
+    y -= 20
+    c.drawString(50, y, f"Saldo Actual: ${saldo:,.0f}")
+
+    c.save()
+    return ruta

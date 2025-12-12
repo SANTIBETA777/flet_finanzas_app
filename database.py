@@ -1,90 +1,93 @@
+# database.py
 import sqlite3
+import os
 
-DB_NAME = "finanzas.db"
+DB_PATH = "finanzas.db"
 
 
-def get_connection():
-    conn = sqlite3.connect(DB_NAME)
+# ============================================================
+#   CONEXIÓN A LA BASE DE DATOS
+# ============================================================
+
+def get_conn():
+    """Retorna una conexión a SQLite con filas tipo diccionario."""
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
+# ============================================================
+#   CREACIÓN DE TABLAS (si no existen)
+# ============================================================
+
 def init_db():
-    conn = get_connection()
+    """Crea todas las tablas necesarias para la app."""
+    conn = get_conn()
     cur = conn.cursor()
 
-    # Tabla de categorías
-    cur.execute(
-        """
+    # ------------------ CATEGORÍAS ------------------
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS categorias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nombre TEXT NOT NULL UNIQUE
+            nombre TEXT UNIQUE NOT NULL
         )
-        """
-    )
+    """)
 
-    # Tabla de transacciones
-    cur.execute(
-        """
+    # Índice para búsquedas rápidas
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_categorias_nombre ON categorias(nombre)")
+
+    # ------------------ TRANSACCIONES ------------------
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS transacciones (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo TEXT NOT NULL,              -- 'ingreso' o 'gasto'
+            tipo TEXT NOT NULL CHECK(tipo IN ('ingreso', 'gasto')),
             monto REAL NOT NULL,
-            fecha TEXT NOT NULL,             -- YYYY-MM-DD
+            fecha TEXT NOT NULL,
             descripcion TEXT,
             categoria_id INTEGER,
             FOREIGN KEY (categoria_id) REFERENCES categorias(id)
         )
-        """
-    )
+    """)
 
-    # Tabla de alertas
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS alertas (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            categoria_id INTEGER,
-            tipo TEXT NOT NULL,              -- 'warning' o 'critical'
-            mensaje TEXT NOT NULL,
-            fecha TEXT NOT NULL,
-            FOREIGN KEY (categoria_id) REFERENCES categorias(id)
-        )
-        """
-    )
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transacciones_fecha ON transacciones(fecha)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_transacciones_tipo ON transacciones(tipo)")
 
-    # Tabla de presupuestos
-    cur.execute(
-        """
+    # ------------------ PRESUPUESTOS ------------------
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS presupuestos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             categoria_id INTEGER NOT NULL,
             monto_maximo REAL NOT NULL,
             FOREIGN KEY (categoria_id) REFERENCES categorias(id)
         )
-        """
-    )
+    """)
 
-    # Índices para optimizar búsquedas
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_trans_tipo_fecha ON transacciones (tipo, fecha)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_trans_categoria ON transacciones (categoria_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_alertas_categoria ON alertas (categoria_id)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_presu_categoria ON presupuestos (categoria_id)")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_presupuesto_categoria ON presupuestos(categoria_id)")
 
-    # Insertar categorías por defecto si no hay ninguna
-    cur.execute("SELECT COUNT(*) as total FROM categorias")
-    total = cur.fetchone()["total"]
-    if total == 0:
-        categorias_default = [
-            "Salario",
-            "Alimentación",
-            "Transporte",
-            "Entretenimiento",
-            "Servicios",
-            "Salud",
-            "Otros",
-        ]
-        for nombre in categorias_default:
-            cur.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre,))
+    # ------------------ ALERTAS ------------------
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS alertas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            categoria_id INTEGER,
+            tipo TEXT NOT NULL CHECK(tipo IN ('warning', 'critical')),
+            mensaje TEXT NOT NULL,
+            fecha TEXT NOT NULL,
+            FOREIGN KEY (categoria_id) REFERENCES categorias(id)
+        )
+    """)
+
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_alertas_fecha ON alertas(fecha)")
 
     conn.commit()
     conn.close()
+
+
+# ============================================================
+#   RESETEAR BASE DE DATOS (opcional para desarrollo)
+# ============================================================
+
+def reset_db():
+    """Elimina la base de datos y la crea de nuevo (solo para desarrollo)."""
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
+    init_db()

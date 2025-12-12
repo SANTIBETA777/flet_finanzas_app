@@ -1,226 +1,221 @@
+import sqlite3
 from dataclasses import dataclass
 from typing import Optional, List
-from database import get_connection
+from database import get_conn
 
 
-# ---------- Clases de datos ----------
+# ============================================================
+#   MODELOS (POO)
+# ============================================================
 
 @dataclass
 class Categoria:
-    id: Optional[int]
+    id: int
     nombre: str
+
+    @staticmethod
+    def from_row(row):
+        return Categoria(id=row["id"], nombre=row["nombre"])
 
 
 @dataclass
 class Transaccion:
-    id: Optional[int]
-    tipo: str              # 'ingreso' o 'gasto'
+    id: int
+    tipo: str
     monto: float
-    fecha: str             # 'YYYY-MM-DD'
+    fecha: str
     descripcion: str
     categoria_id: Optional[int]
     categoria_nombre: Optional[str] = None
 
-
-@dataclass
-class Alerta:
-    id: Optional[int]
-    categoria_id: Optional[int]
-    tipo: str              # 'warning' o 'critical'
-    mensaje: str
-    fecha: str             # 'YYYY-MM-DD'
+    @staticmethod
+    def from_row(row):
+        return Transaccion(
+            id=row["id"],
+            tipo=row["tipo"],
+            monto=row["monto"],
+            fecha=row["fecha"],
+            descripcion=row["descripcion"],
+            categoria_id=row["categoria_id"],
+            categoria_nombre=row["categoria"],
+        )
 
 
 @dataclass
 class Presupuesto:
-    id: Optional[int]
+    id: int
     categoria_id: int
     monto_maximo: float
 
+    @staticmethod
+    def from_row(row):
+        return Presupuesto(
+            id=row["id"],
+            categoria_id=row["categoria_id"],
+            monto_maximo=row["monto_maximo"],
+        )
 
-# ---------- Categorías ----------
 
-def obtener_categorias() -> list[Categoria]:
-    conn = get_connection()
+@dataclass
+class Alerta:
+    id: int
+    categoria_id: Optional[int]
+    tipo: str
+    mensaje: str
+    fecha: str
+
+    @staticmethod
+    def from_row(row):
+        return Alerta(
+            id=row["id"],
+            categoria_id=row["categoria_id"],
+            tipo=row["tipo"],
+            mensaje=row["mensaje"],
+            fecha=row["fecha"],
+        )
+
+
+# ============================================================
+#   CATEGORÍAS
+# ============================================================
+
+def obtener_categorias() -> List[Categoria]:
+    conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id, nombre FROM categorias ORDER BY nombre")
-    filas = cur.fetchall()
+    cur.execute("SELECT id, nombre FROM categorias ORDER BY nombre ASC")
+    rows = cur.fetchall()
     conn.close()
-    return [Categoria(id=f["id"], nombre=f["nombre"]) for f in filas]
+    return [Categoria.from_row(row) for row in rows]
 
 
-def crear_categoria(nombre: str) -> Categoria:
-    conn = get_connection()
+def crear_categoria(nombre: str):
+    conn = get_conn()
     cur = conn.cursor()
     cur.execute("INSERT INTO categorias (nombre) VALUES (?)", (nombre,))
     conn.commit()
-    cat_id = cur.lastrowid
     conn.close()
-    return Categoria(id=cat_id, nombre=nombre)
 
 
-# ---------- Transacciones ----------
-
-def crear_transaccion(
-    tipo: str,
-    monto: float,
-    fecha: str,
-    descripcion: str,
-    categoria_id: int | None,
-) -> Transaccion:
-    conn = get_connection()
+def editar_categoria(cat_id: int, nombre: str):
+    conn = get_conn()
     cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO transacciones (tipo, monto, fecha, descripcion, categoria_id)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (tipo, monto, fecha, descripcion, categoria_id),
-    )
+    cur.execute("UPDATE categorias SET nombre = ? WHERE id = ?", (nombre, cat_id))
     conn.commit()
-    trans_id = cur.lastrowid
     conn.close()
-    return Transaccion(
-        id=trans_id,
-        tipo=tipo,
-        monto=monto,
-        fecha=fecha,
-        descripcion=descripcion,
-        categoria_id=categoria_id,
-    )
 
 
-def obtener_transacciones() -> list[Transaccion]:
-    conn = get_connection()
+def eliminar_categoria(cat_id: int):
+    conn = get_conn()
     cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT t.id, t.tipo, t.monto, t.fecha, t.descripcion,
-               t.categoria_id, c.nombre AS categoria_nombre
+    cur.execute("DELETE FROM categorias WHERE id = ?", (cat_id,))
+    conn.commit()
+    conn.close()
+
+
+# ============================================================
+#   PRESUPUESTOS
+# ============================================================
+
+def obtener_presupuestos() -> List[Presupuesto]:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM presupuestos")
+    rows = cur.fetchall()
+    conn.close()
+    return [Presupuesto.from_row(row) for row in rows]
+
+
+def guardar_presupuesto(categoria_id: int, monto: float):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id FROM presupuestos WHERE categoria_id = ?", (categoria_id,))
+    row = cur.fetchone()
+
+    if row:
+        cur.execute(
+            "UPDATE presupuestos SET monto_maximo = ? WHERE categoria_id = ?",
+            (monto, categoria_id),
+        )
+    else:
+        cur.execute(
+            "INSERT INTO presupuestos (categoria_id, monto_maximo) VALUES (?, ?)",
+            (categoria_id, monto),
+        )
+
+    conn.commit()
+    conn.close()
+
+
+# ============================================================
+#   TRANSACCIONES
+# ============================================================
+
+def obtener_transacciones() -> List[Transaccion]:
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        SELECT 
+            t.id,
+            t.tipo,
+            t.monto,
+            t.fecha,
+            t.descripcion,
+            t.categoria_id,
+            c.nombre AS categoria
         FROM transacciones t
         LEFT JOIN categorias c ON t.categoria_id = c.id
-        ORDER BY t.fecha DESC, t.id DESC
-        """
-    )
-    filas = cur.fetchall()
+        ORDER BY t.fecha DESC
+    """)
+
+    rows = cur.fetchall()
     conn.close()
-    return [
-        Transaccion(
-            id=f["id"],
-            tipo=f["tipo"],
-            monto=f["monto"],
-            fecha=f["fecha"],
-            descripcion=f["descripcion"] or "",
-            categoria_id=f["categoria_id"],
-            categoria_nombre=f["categoria_nombre"],
-        )
-        for f in filas
-    ]
+    return [Transaccion.from_row(row) for row in rows]
+
+
+def crear_transaccion(tipo: str, monto: float, fecha: str, descripcion: str, categoria_id=None):
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("""
+        INSERT INTO transacciones (tipo, monto, fecha, descripcion, categoria_id)
+        VALUES (?, ?, ?, ?, ?)
+    """, (tipo, monto, fecha, descripcion, categoria_id))
+
+    conn.commit()
+    conn.close()
 
 
 def eliminar_transaccion(trans_id: int):
-    conn = get_connection()
+    conn = get_conn()
     cur = conn.cursor()
     cur.execute("DELETE FROM transacciones WHERE id = ?", (trans_id,))
     conn.commit()
     conn.close()
 
 
-# ---------- Presupuestos ----------
+# ============================================================
+#   ALERTAS
+# ============================================================
 
-def obtener_presupuestos() -> list[Presupuesto]:
-    conn = get_connection()
+def obtener_alertas() -> List[Alerta]:
+    conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT id, categoria_id, monto_maximo FROM presupuestos")
-    filas = cur.fetchall()
+    cur.execute("SELECT * FROM alertas ORDER BY fecha DESC")
+    rows = cur.fetchall()
     conn.close()
-    return [
-        Presupuesto(
-            id=f["id"],
-            categoria_id=f["categoria_id"],
-            monto_maximo=f["monto_maximo"],
-        )
-        for f in filas
-    ]
+    return [Alerta.from_row(row) for row in rows]
 
 
-def guardar_presupuesto(categoria_id: int, monto_maximo: float) -> Presupuesto:
-    conn = get_connection()
+def crear_alerta(categoria_id: Optional[int], tipo: str, mensaje: str, fecha: str):
+    conn = get_conn()
     cur = conn.cursor()
 
-    # Si ya existe presupuesto para esa categoría, lo actualizamos
-    cur.execute(
-        "SELECT id FROM presupuestos WHERE categoria_id = ?",
-        (categoria_id,),
-    )
-    fila = cur.fetchone()
-    if fila:
-        cur.execute(
-            "UPDATE presupuestos SET monto_maximo = ? WHERE id = ?",
-            (monto_maximo, fila["id"]),
-        )
-        presu_id = fila["id"]
-    else:
-        cur.execute(
-            "INSERT INTO presupuestos (categoria_id, monto_maximo) VALUES (?, ?)",
-            (categoria_id, monto_maximo),
-        )
-        presu_id = cur.lastrowid
-
-    conn.commit()
-    conn.close()
-
-    return Presupuesto(id=presu_id, categoria_id=categoria_id, monto_maximo=monto_maximo)
-
-
-# ---------- Alertas ----------
-
-def crear_alerta(
-    categoria_id: int | None,
-    tipo: str,
-    mensaje: str,
-    fecha: str,
-) -> Alerta:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """
+    cur.execute("""
         INSERT INTO alertas (categoria_id, tipo, mensaje, fecha)
         VALUES (?, ?, ?, ?)
-        """,
-        (categoria_id, tipo, mensaje, fecha),
-    )
+    """, (categoria_id, tipo, mensaje, fecha))
+
     conn.commit()
-    alerta_id = cur.lastrowid
     conn.close()
-    return Alerta(
-        id=alerta_id,
-        categoria_id=categoria_id,
-        tipo=tipo,
-        mensaje=mensaje,
-        fecha=fecha,
-    )
-
-
-def obtener_alertas() -> list[Alerta]:
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, categoria_id, tipo, mensaje, fecha
-        FROM alertas
-        ORDER BY fecha DESC, id DESC
-        """
-    )
-    filas = cur.fetchall()
-    conn.close()
-    return [
-        Alerta(
-            id=f["id"],
-            categoria_id=f["categoria_id"],
-            tipo=f["tipo"],
-            mensaje=f["mensaje"],
-            fecha=f["fecha"],
-        )
-        for f in filas
-    ]

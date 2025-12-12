@@ -1,158 +1,167 @@
+# ui/components.py
 import flet as ft
 from validators import (
     validar_monto,
-    validar_texto,
     validar_fecha,
+    validar_texto,
 )
 
 
-# ---------------------------------------------------------
-# COMPONENTE: Texto de error reutilizable
-# ---------------------------------------------------------
-class ErrorText(ft.Text):
-    def __init__(self, value=""):
-        super().__init__(value=value, color="red", size=12, visible=False)
+# ============================================================
+#   TÍTULO DE SECCIÓN
+# ============================================================
 
-    def show(self, msg: str):
-        self.value = msg
-        self.visible = True
-        self.update()
-
-    def hide(self):
-        self.visible = False
-        self.update()
-
-
-# ---------------------------------------------------------
-# COMPONENTE: Campo de texto validado
-# ---------------------------------------------------------
-class InputField(ft.Column):
-    def __init__(self, label: str, validator=None, multiline=False):
+class SectionTitle(ft.UserControl):
+    def __init__(self, texto: str):
         super().__init__()
-        self.validator = validator
-        self.input = ft.TextField(label=label, multiline=multiline)
-        self.error = ErrorText()
+        self.texto = texto
 
-        self.controls = [self.input, self.error]
+    def build(self):
+        return ft.Text(
+            self.texto,
+            size=24,
+            weight="bold",
+            color=ft.colors.BLUE_700,
+        )
+
+
+# ============================================================
+#   INPUT DE TEXTO GENERAL
+# ============================================================
+
+class InputField(ft.UserControl):
+    def __init__(self, label: str, width=300):
+        super().__init__()
+        self.label = label
+        self.width = width
+        self.field = ft.TextField(label=label, width=width)
+
+    def build(self):
+        return self.field
 
     def get_value(self):
-        return self.input.value
+        return self.field.value
 
-    def validate(self):
-        if self.validator:
-            ok, msg = self.validator(self.input.value)
-            if not ok:
-                self.error.show(msg)
-                return False
-        self.error.hide()
-        return True
+    def set_value(self, value):
+        self.field.value = value
+        self.update()
 
 
-# ---------------------------------------------------------
-# COMPONENTE: Campo numérico validado
-# ---------------------------------------------------------
-class NumberField(InputField):
-    def __init__(self, label="Monto"):
-        super().__init__(label, validator=validar_monto)
+# ============================================================
+#   INPUT NUMÉRICO (VALIDADO)
+# ============================================================
 
-
-# ---------------------------------------------------------
-# COMPONENTE: Selector de fecha con DatePicker
-# ---------------------------------------------------------
-class DateField(ft.Column):
-    def __init__(self, label="Fecha"):
+class NumberField(ft.UserControl):
+    def __init__(self, label: str, width=300):
         super().__init__()
-
-        self.date_picker = ft.DatePicker()
-        self.input = ft.TextField(
+        self.label = label
+        self.width = width
+        self.field = ft.TextField(
             label=label,
-            read_only=True,
-            suffix=ft.IconButton(
-                icon=ft.icons.CALENDAR_MONTH,
-                on_click=lambda e: self.date_picker.pick_date(),
-            ),
+            width=width,
+            keyboard_type=ft.KeyboardType.NUMBER,
         )
-        self.error = ErrorText()
 
-        self.date_picker.on_change = self._on_date_selected
-
-        self.controls = [self.date_picker, self.input, self.error]
-
-    def _on_date_selected(self, e):
-        self.input.value = self.date_picker.value.strftime("%Y-%m-%d")
-        self.input.update()
+    def build(self):
+        return self.field
 
     def get_value(self):
-        return self.input.value
+        return self.field.value
 
     def validate(self):
-        ok, msg = validar_fecha(self.input.value)
-        if not ok:
-            self.error.show(msg)
-            return False
-        self.error.hide()
-        return True
+        ok, msg = validar_monto(self.field.value)
+        return ok, msg
 
 
-# ---------------------------------------------------------
-# COMPONENTE: Botón con ícono
-# ---------------------------------------------------------
-class IconButtonPrimary(ft.ElevatedButton):
-    def __init__(self, text, icon, on_click):
-        super().__init__(
-            text=text,
-            icon=icon,
-            on_click=on_click,
-            style=ft.ButtonStyle(
-                bgcolor="#4d96ff",
-                color="white",
-                padding=15,
-                shape=ft.RoundedRectangleBorder(radius=8),
+# ============================================================
+#   INPUT DE FECHA (OBLIGATORIO)
+# ============================================================
+
+class DateField(ft.UserControl):
+    def __init__(self, label="Fecha", width=300):
+        super().__init__()
+        self.label = label
+        self.width = width
+
+        self.field = ft.TextField(
+            label=label,
+            width=width,
+            read_only=True,
+            suffix_icon=ft.icons.CALENDAR_MONTH,
+            on_click=self.abrir_datepicker,
+        )
+
+        self.datepicker = ft.DatePicker(
+            on_change=self.seleccionar_fecha,
+        )
+
+    def build(self):
+        return ft.Column([self.field, self.datepicker])
+
+    def abrir_datepicker(self, e):
+        self.datepicker.open = True
+        self.update()
+
+    def seleccionar_fecha(self, e):
+        if self.datepicker.value:
+            self.field.value = self.datepicker.value.strftime("%Y-%m-%d")
+            self.update()
+
+    def get_value(self):
+        return self.field.value
+
+    def validate(self):
+        ok, msg = validar_fecha(self.field.value)
+        return ok, msg
+
+
+# ============================================================
+#   DIÁLOGO DE CONFIRMACIÓN
+# ============================================================
+
+class ConfirmDialog(ft.AlertDialog):
+    def __init__(self, mensaje: str, on_confirm):
+        super().__init__()
+        self.mensaje = mensaje
+        self.on_confirm = on_confirm
+
+        self.title = ft.Text("Confirmación")
+        self.content = ft.Text(mensaje)
+
+        self.actions = [
+            ft.TextButton("Cancelar", on_click=self.cerrar),
+            ft.ElevatedButton("Confirmar", on_click=self.confirmar),
+        ]
+
+    def confirmar(self, e):
+        if self.on_confirm:
+            self.on_confirm()
+        self.open = False
+
+    def cerrar(self, e):
+        self.open = False
+
+
+# ============================================================
+#   TARJETA DE RESUMEN (Dashboard)
+# ============================================================
+
+class SummaryCard(ft.UserControl):
+    def __init__(self, titulo: str, valor: str, color="black"):
+        super().__init__()
+        self.titulo = titulo
+        self.valor = valor
+        self.color = color
+
+    def build(self):
+        return ft.Container(
+            padding=20,
+            bgcolor=ft.colors.BLUE_50,
+            border_radius=10,
+            content=ft.Column(
+                [
+                    ft.Text(self.titulo, size=16, weight="bold"),
+                    ft.Text(self.valor, size=22, weight="bold", color=self.color),
+                ]
             ),
         )
-
-
-# ---------------------------------------------------------
-# COMPONENTE: Título de sección
-# ---------------------------------------------------------
-class SectionTitle(ft.Text):
-    def __init__(self, text):
-        super().__init__(text, size=22, weight="bold")
-
-
-# ---------------------------------------------------------
-# COMPONENTE: Contenedor tipo tarjeta
-# ---------------------------------------------------------
-class CardContainer(ft.Container):
-    def __init__(self, content):
-        super().__init__(
-            content=content,
-            padding=15,
-            border_radius=10,
-            bgcolor="#f5f5f5",
-        )
-
-
-# ---------------------------------------------------------
-# COMPONENTE: Diálogo de confirmación
-# ---------------------------------------------------------
-class ConfirmDialog(ft.AlertDialog):
-    def __init__(self, title, message, on_confirm):
-        super().__init__(
-            modal=True,
-            title=ft.Text(title),
-            content=ft.Text(message),
-            actions=[
-                ft.TextButton("Cancelar", on_click=self._close),
-                ft.TextButton("Confirmar", on_click=lambda e: self._confirm(on_confirm)),
-            ],
-        )
-
-    def _close(self, e):
-        self.open = False
-        self.update()
-
-    def _confirm(self, callback):
-        callback()
-        self.open = False
-        self.update()

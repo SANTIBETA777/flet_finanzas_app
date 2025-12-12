@@ -1,40 +1,47 @@
+# ui/screens/categorias_screen.py
 import flet as ft
 from models import (
     obtener_categorias,
     crear_categoria,
+    editar_categoria,
+    eliminar_categoria,
 )
 from ui.components import (
     InputField,
-    ConfirmDialog,
     SectionTitle,
+    ConfirmDialog,
 )
 from validators import validar_texto
 
 
 class CategoriasScreen(ft.UserControl):
-    """
-    Pantalla de gestión de categorías:
-    - Crear categorías
-    - Validación de texto
-    - Listar categorías
-    - Eliminar categorías (si el profe lo permite)
-    """
-
     def __init__(self, page: ft.Page):
         super().__init__()
         self.page = page
 
-        # Campo para nueva categoría
-        self.campo_nombre = InputField("Nombre de la categoría", validator=validar_texto)
+        # Campo para crear/editar
+        self.campo_nombre = InputField("Nombre de la categoría")
+
+        # Botón guardar
+        self.btn_guardar = ft.ElevatedButton(
+            text="Guardar categoría",
+            icon=ft.icons.SAVE,
+            on_click=self.guardar_categoria,
+        )
 
         # Tabla de categorías
         self.tabla = ft.DataTable(
             columns=[
+                ft.DataColumn(ft.Text("ID")),
                 ft.DataColumn(ft.Text("Nombre")),
-                ft.DataColumn(ft.Text("Acciones")),
+                ft.DataColumn(ft.Text("Editar")),
+                ft.DataColumn(ft.Text("Eliminar")),
             ],
             rows=[],
         )
+
+        # ID en edición (None = crear)
+        self.editando_id = None
 
     # ---------------------------------------------------------
     # Al montar la pantalla
@@ -43,9 +50,9 @@ class CategoriasScreen(ft.UserControl):
         self.cargar_tabla()
 
     # ---------------------------------------------------------
-    # Registrar categoría
+    # Guardar categoría (crear o editar)
     # ---------------------------------------------------------
-    def registrar_categoria(self, e):
+    def guardar_categoria(self, e):
         nombre = self.campo_nombre.get_value()
 
         ok, msg = validar_texto(nombre)
@@ -55,34 +62,53 @@ class CategoriasScreen(ft.UserControl):
             self.page.update()
             return
 
-        crear_categoria(nombre)
+        if self.editando_id is None:
+            # Crear
+            crear_categoria(nombre)
+            mensaje = "Categoría creada."
+        else:
+            # Editar
+            editar_categoria(self.editando_id, nombre)
+            mensaje = "Categoría actualizada."
+            self.editando_id = None
+            self.btn_guardar.text = "Guardar categoría"
 
-        self.page.snack_bar = ft.SnackBar(ft.Text("Categoría creada"), bgcolor="green")
+        self.page.snack_bar = ft.SnackBar(ft.Text(mensaje), bgcolor="green")
         self.page.snack_bar.open = True
         self.page.update()
 
+        self.campo_nombre.set_value("")
         self.cargar_tabla()
 
     # ---------------------------------------------------------
-    # Cargar tabla de categorías
+    # Cargar tabla
     # ---------------------------------------------------------
     def cargar_tabla(self):
         categorias = obtener_categorias()
-
         self.tabla.rows = []
 
         for c in categorias:
+            btn_editar = ft.IconButton(
+                icon=ft.icons.EDIT,
+                tooltip="Editar",
+                icon_color="blue",
+                on_click=lambda e, cat=c: self.editar(cat),
+            )
+
+            btn_eliminar = ft.IconButton(
+                icon=ft.icons.DELETE,
+                tooltip="Eliminar",
+                icon_color="red",
+                on_click=lambda e, cat=c: self.confirmar_eliminar(cat.id),
+            )
+
             self.tabla.rows.append(
                 ft.DataRow(
                     cells=[
+                        ft.DataCell(ft.Text(str(c.id))),
                         ft.DataCell(ft.Text(c.nombre)),
-                        ft.DataCell(
-                            ft.IconButton(
-                                icon=ft.icons.DELETE,
-                                icon_color="red",
-                                on_click=lambda e, cat_id=c.id: self.confirmar_eliminar(cat_id),
-                            )
-                        ),
+                        ft.DataCell(btn_editar),
+                        ft.DataCell(btn_eliminar),
                     ]
                 )
             )
@@ -90,37 +116,34 @@ class CategoriasScreen(ft.UserControl):
         self.tabla.update()
 
     # ---------------------------------------------------------
+    # Editar categoría
+    # ---------------------------------------------------------
+    def editar(self, categoria):
+        self.editando_id = categoria.id
+        self.campo_nombre.set_value(categoria.nombre)
+        self.btn_guardar.text = "Actualizar categoría"
+        self.update()
+
+    # ---------------------------------------------------------
     # Confirmar eliminación
     # ---------------------------------------------------------
-    def confirmar_eliminar(self, categoria_id):
-        dialog = ConfirmDialog(
-            title="Eliminar categoría",
-            message="¿Seguro que deseas eliminar esta categoría?",
-            on_confirm=lambda: self.eliminar_categoria(categoria_id),
+    def confirmar_eliminar(self, cat_id: int):
+        dialogo = ConfirmDialog(
+            mensaje="¿Desea eliminar esta categoría?",
+            on_confirm=lambda: self.eliminar(cat_id),
         )
-        self.page.dialog = dialog
-        dialog.open = True
+        self.page.dialog = dialogo
+        dialogo.open = True
         self.page.update()
 
-    # ---------------------------------------------------------
-    # Eliminar categoría
-    # ---------------------------------------------------------
-    def eliminar_categoria(self, categoria_id):
-        # Eliminación directa (el profe no pidió restricciones)
-        import sqlite3
-        from database import get_connection
+    def eliminar(self, cat_id: int):
+        eliminar_categoria(cat_id)
 
-        conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("DELETE FROM categorias WHERE id = ?", (categoria_id,))
-        conn.commit()
-        conn.close()
-
-        self.cargar_tabla()
-
-        self.page.snack_bar = ft.SnackBar(ft.Text("Categoría eliminada"), bgcolor="orange")
+        self.page.snack_bar = ft.SnackBar(ft.Text("Categoría eliminada."), bgcolor="orange")
         self.page.snack_bar.open = True
         self.page.update()
+
+        self.cargar_tabla()
 
     # ---------------------------------------------------------
     # Render principal
@@ -130,14 +153,9 @@ class CategoriasScreen(ft.UserControl):
             [
                 SectionTitle("Gestión de Categorías"),
 
-                ft.Text("Crear nueva categoría", size=18, weight="bold"),
+                ft.Text("Crear o editar categoría", size=18, weight="bold"),
                 self.campo_nombre,
-
-                ft.ElevatedButton(
-                    "Crear categoría",
-                    icon=ft.icons.ADD,
-                    on_click=self.registrar_categoria,
-                ),
+                self.btn_guardar,
 
                 ft.Divider(),
 
