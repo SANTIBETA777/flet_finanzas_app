@@ -1,4 +1,3 @@
-# ui/screens/transacciones_screen.py
 import flet as ft
 from models import (
     obtener_transacciones,
@@ -14,18 +13,25 @@ from ui.components import (
 from validators import validar_fecha
 
 
-class TransaccionesScreen(ft.UserControl):
+class TransaccionesScreen(ft.Column):
     def __init__(self, page: ft.Page):
-        super().__init__()
+        print(">>> TransaccionesScreen se está creando")
+        super().__init__(scroll=ft.ScrollMode.AUTO, expand=True)
         self.page = page
 
         # -----------------------------
-        # FILTROS
+        # FILTROS PROFESIONALES
         # -----------------------------
         self.filtro_descripcion = InputField("Buscar descripción")
-        self.filtro_categoria = ft.Dropdown(label="Categoría")
+        self.filtro_categoria = ft.Dropdown(
+            label="Categoría",
+            width=250,
+            border_radius=8,
+        )
         self.filtro_tipo = ft.Dropdown(
             label="Tipo",
+            width=200,
+            border_radius=8,
             options=[
                 ft.dropdown.Option("ingreso"),
                 ft.dropdown.Option("gasto"),
@@ -38,11 +44,17 @@ class TransaccionesScreen(ft.UserControl):
         self.btn_filtrar = ft.ElevatedButton(
             "Aplicar filtros",
             icon=ft.icons.SEARCH,
+            style=ft.ButtonStyle(
+                bgcolor=ft.colors.BLUE,
+                color=ft.colors.WHITE,
+                padding=12,
+                shape=ft.RoundedRectangleBorder(radius=8),
+            ),
             on_click=self.aplicar_filtros,
         )
 
         # -----------------------------
-        # TABLA
+        # TABLA PROFESIONAL
         # -----------------------------
         self.tabla = ft.DataTable(
             columns=[
@@ -54,10 +66,62 @@ class TransaccionesScreen(ft.UserControl):
                 ft.DataColumn(ft.Text("Eliminar")),
             ],
             rows=[],
+            heading_row_color=ft.colors.with_opacity(0.1, ft.colors.BLUE_100),
+            border=ft.border.all(1, ft.colors.GREY_300),
+            border_radius=8,
         )
 
+        # -----------------------------
+        # LAYOUT PRINCIPAL
+        # -----------------------------
+        self.controls = [
+            SectionTitle("Historial de Transacciones"),
+
+            ft.Container(
+                padding=20,
+                bgcolor=ft.colors.with_opacity(0.05, ft.colors.BLUE_100),
+                border_radius=12,
+                content=ft.Column(
+                    [
+                        ft.Text("Filtros", size=18, weight="bold"),
+
+                        ft.Row(
+                            [
+                                self.filtro_descripcion,
+                                self.filtro_tipo,
+                            ],
+                            spacing=20,
+                        ),
+
+                        ft.Row(
+                            [
+                                self.filtro_categoria,
+                            ],
+                            spacing=20,
+                        ),
+
+                        ft.Row(
+                            [
+                                self.filtro_fecha_desde,
+                                self.filtro_fecha_hasta,
+                            ],
+                            spacing=20,
+                        ),
+
+                        self.btn_filtrar,
+                    ],
+                    spacing=15,
+                ),
+            ),
+
+            ft.Divider(),
+
+            ft.Text("Resultados", size=18, weight="bold"),
+            self.tabla,
+        ]
+
     # ---------------------------------------------------------
-    # Al montar la pantalla
+    # Se ejecuta cuando el control YA está en la página
     # ---------------------------------------------------------
     def did_mount(self):
         self.cargar_categorias()
@@ -128,7 +192,8 @@ class TransaccionesScreen(ft.UserControl):
                 icon=ft.icons.DELETE,
                 icon_color="red",
                 tooltip="Eliminar",
-                on_click=lambda e, trans_id=t.id: self.confirmar_eliminar(trans_id),
+                data=t.id,
+                on_click=self.confirmar_eliminar,
             )
 
             self.tabla.rows.append(
@@ -136,7 +201,7 @@ class TransaccionesScreen(ft.UserControl):
                     cells=[
                         ft.DataCell(ft.Text(t.fecha)),
                         ft.DataCell(ft.Text(t.tipo)),
-                        ft.DataCell(ft.Text(f"${t.monto:.0f}")),
+                        ft.DataCell(ft.Text(f"${t.monto:,.0f}")),
                         ft.DataCell(ft.Text(t.categoria_nombre or "—")),
                         ft.DataCell(ft.Text(t.descripcion)),
                         ft.DataCell(btn_eliminar),
@@ -149,7 +214,9 @@ class TransaccionesScreen(ft.UserControl):
     # ---------------------------------------------------------
     # Confirmar eliminación
     # ---------------------------------------------------------
-    def confirmar_eliminar(self, trans_id: int):
+    def confirmar_eliminar(self, e):
+        trans_id = e.control.data
+
         dialogo = ConfirmDialog(
             mensaje="¿Desea eliminar esta transacción?",
             on_confirm=lambda: self.eliminar(trans_id),
@@ -161,31 +228,12 @@ class TransaccionesScreen(ft.UserControl):
     def eliminar(self, trans_id: int):
         eliminar_transaccion(trans_id)
 
-        self.page.snack_bar = ft.SnackBar(ft.Text("Transacción eliminada."), bgcolor="orange")
+        self.page.snack_bar = ft.SnackBar(
+            ft.Text("Transacción eliminada."),
+            bgcolor="orange",
+            duration=2000,
+        )
         self.page.snack_bar.open = True
         self.page.update()
 
         self.cargar_tabla()
-
-    # ---------------------------------------------------------
-    # Render principal
-    # ---------------------------------------------------------
-    def build(self):
-        return ft.Column(
-            [
-                SectionTitle("Historial de Transacciones"),
-
-                ft.Text("Filtros", size=18, weight="bold"),
-                ft.Row([self.filtro_descripcion, self.filtro_tipo]),
-                ft.Row([self.filtro_categoria]),
-                ft.Row([self.filtro_fecha_desde, self.filtro_fecha_hasta]),
-                self.btn_filtrar,
-
-                ft.Divider(),
-
-                ft.Text("Resultados", size=18, weight="bold"),
-                self.tabla,
-            ],
-            scroll=ft.ScrollMode.AUTO,
-            expand=True,
-        )

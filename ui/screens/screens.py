@@ -7,14 +7,14 @@ from ui.screens.categorias_screen import CategoriasScreen
 from ui.screens.alertas_screen import AlertasScreen
 
 
-class Screens(ft.UserControl):
+class Screens(ft.Column):
     """
     Controlador principal de navegación.
-    Compatible con Flet 0.25.2 (sin ThemeMode ni Theme).
+    Compatible con Flet 0.27.2 (sin UserControl).
     """
 
     def __init__(self, page: ft.Page):
-        super().__init__()
+        super().__init__(expand=True)
         self.page = page
 
         # Contenedor donde se cargan las pantallas
@@ -61,19 +61,16 @@ class Screens(ft.UserControl):
             ),
         )
 
-        # Asignar AppBar directamente a la página (no dentro de Column)
+        # Asignar AppBar directamente a la página
         self.page.appbar = self.appbar
 
         # Asignar Drawer directamente a la página
         self.page.drawer = self.drawer
 
         # Layout principal
-        self.layout = ft.Column(
-            [
-                self.content,
-            ],
-            expand=True,
-        )
+        self.controls = [
+            self.content,
+        ]
 
         # Cargar pantalla inicial
         self._cargar_pantalla("Dashboard")
@@ -114,10 +111,9 @@ class Screens(ft.UserControl):
         self.page.update()
 
     # ---------------------------------------------------------
-    # Cambiar tema (desactivado en esta versión)
+    # Cambiar tema (desactivado)
     # ---------------------------------------------------------
     def _cambiar_tema(self):
-        # Flet 0.25.2 no soporta ThemeMode, así que esta función queda vacía
         pass
 
     # ---------------------------------------------------------
@@ -139,10 +135,4 @@ class Screens(ft.UserControl):
         elif nombre == "Alertas":
             self.content.content = AlertasScreen(self.page)
 
-        self.update()
-
-    # ---------------------------------------------------------
-    # Render principal
-    # ---------------------------------------------------------
-    def build(self):
-        return self.layout
+        self.page.update()

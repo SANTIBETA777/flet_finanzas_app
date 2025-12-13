@@ -1,4 +1,3 @@
-# ui/screens/ingresos_screen.py
 import flet as ft
 from models import (
     obtener_categorias,
@@ -14,6 +13,9 @@ from ui.components import (
     ConfirmDialog,
 )
 from validators import validar_transaccion
+from reports import exportar_transacciones_excel, exportar_transacciones_pdf
+import tempfile
+import os
 
 
 class IngresosScreen(ft.UserControl):
@@ -21,20 +23,54 @@ class IngresosScreen(ft.UserControl):
         super().__init__()
         self.page = page
 
-        # Campos del formulario
-        self.fecha = DateField("Fecha del ingreso")
+        # FORMULARIO
+        self.fecha = DateField("Fecha del ingreso", page=self.page)
         self.descripcion = InputField("Descripción")
         self.monto = NumberField("Monto")
-        self.dropdown_categoria = ft.Dropdown(label="Categoría")
+        self.dropdown_categoria = ft.Dropdown(
+            label="Categoría",
+            width=300,
+            border_radius=8,
+        )
 
-        # Botón guardar
         self.btn_guardar = ft.ElevatedButton(
             text="Registrar ingreso",
             icon=ft.icons.ADD,
-            on_click=self.guardar_ingreso,
+            style=ft.ButtonStyle(
+                bgcolor=ft.colors.GREEN,
+                color=ft.colors.WHITE,
+                padding=15,
+                shape=ft.RoundedRectangleBorder(radius=8),
+            ),
+            on_click=self.confirmar_guardar,
         )
 
-        # Tabla de ingresos
+        # EXPORTACIÓN
+        self.btn_exportar_excel = ft.ElevatedButton(
+            text="Exportar Excel",
+            icon=ft.icons.TABLE_VIEW,
+            style=ft.ButtonStyle(
+                bgcolor=ft.colors.BLUE_600,
+                color=ft.colors.WHITE,
+                padding=12,
+                shape=ft.RoundedRectangleBorder(radius=8),
+            ),
+            on_click=self.exportar_excel,
+        )
+
+        self.btn_exportar_pdf = ft.ElevatedButton(
+            text="Exportar PDF",
+            icon=ft.icons.PICTURE_AS_PDF,
+            style=ft.ButtonStyle(
+                bgcolor=ft.colors.RED_600,
+                color=ft.colors.WHITE,
+                padding=12,
+                shape=ft.RoundedRectangleBorder(radius=8),
+            ),
+            on_click=self.exportar_pdf,
+        )
+
+        # TABLA
         self.tabla = ft.DataTable(
             columns=[
                 ft.DataColumn(ft.Text("Fecha")),
@@ -44,29 +80,90 @@ class IngresosScreen(ft.UserControl):
                 ft.DataColumn(ft.Text("Eliminar")),
             ],
             rows=[],
+            heading_row_color=ft.colors.with_opacity(0.1, ft.colors.BLUE_100),
+            border=ft.border.all(1, ft.colors.GREY_300),
+            border_radius=8,
         )
 
     # ---------------------------------------------------------
-    # Al montar la pantalla
+    # SE EJECUTA AUTOMÁTICAMENTE AL MONTAR EL CONTROL
     # ---------------------------------------------------------
     def did_mount(self):
         self.cargar_categorias()
         self.cargar_tabla()
 
     # ---------------------------------------------------------
-    # Cargar categorías en dropdown
+    # UI PRINCIPAL
+    # ---------------------------------------------------------
+    def build(self):
+        return ft.Column(
+            scroll=ft.ScrollMode.AUTO,
+            expand=True,
+            controls=[
+                SectionTitle("Gestión de Ingresos"),
+
+                ft.Container(
+                    padding=20,
+                    bgcolor=ft.colors.with_opacity(0.05, ft.colors.BLUE_100),
+                    border_radius=12,
+                    content=ft.Column(
+                        [
+                            ft.Text("Registrar nuevo ingreso", size=18, weight="bold"),
+                            self.fecha,
+                            self.descripcion,
+                            self.monto,
+                            self.dropdown_categoria,
+                            self.btn_guardar,
+                        ],
+                        spacing=15,
+                    ),
+                ),
+
+                ft.Divider(),
+
+                ft.Text("Historial de ingresos", size=18, weight="bold"),
+                self.tabla,
+
+                ft.Row(
+                    [
+                        self.btn_exportar_excel,
+                        self.btn_exportar_pdf,
+                    ],
+                    spacing=20,
+                ),
+            ],
+        )
+
+    # ---------------------------------------------------------
+    # Cargar categorías
     # ---------------------------------------------------------
     def cargar_categorias(self):
         categorias = obtener_categorias()
         self.dropdown_categoria.options = [
             ft.dropdown.Option(str(c.id), c.nombre) for c in categorias
         ]
-        self.dropdown_categoria.update()
+
+        if categorias:
+            self.dropdown_categoria.value = str(categorias[0].id)
+
+        self.update()
+
+    # ---------------------------------------------------------
+    # Confirmar antes de guardar
+    # ---------------------------------------------------------
+    def confirmar_guardar(self, e):
+        dialogo = ConfirmDialog(
+            mensaje="¿Desea registrar este ingreso?",
+            on_confirm=self.guardar_ingreso,
+        )
+        self.page.dialog = dialogo
+        dialogo.open = True
+        self.page.update()
 
     # ---------------------------------------------------------
     # Guardar ingreso
     # ---------------------------------------------------------
-    def guardar_ingreso(self, e):
+    def guardar_ingreso(self):
         fecha = self.fecha.get_value()
         descripcion = self.descripcion.get_value()
         monto = self.monto.get_value()
@@ -75,9 +172,7 @@ class IngresosScreen(ft.UserControl):
 
         ok, msg = validar_transaccion(fecha, descripcion, monto, tipo, categoria_id)
         if not ok:
-            self.page.snack_bar = ft.SnackBar(ft.Text(msg), bgcolor="red")
-            self.page.snack_bar.open = True
-            self.page.update()
+            self._snack(msg, "red")
             return
 
         crear_transaccion(
@@ -85,17 +180,14 @@ class IngresosScreen(ft.UserControl):
             monto=float(monto),
             fecha=fecha,
             descripcion=descripcion,
-            categoria_id=int(categoria_id) if categoria_id else None,
+            categoria_id=int(categoria_id),
         )
 
-        self.page.snack_bar = ft.SnackBar(ft.Text("Ingreso registrado."), bgcolor="green")
-        self.page.snack_bar.open = True
-        self.page.update()
-
+        self._snack("Ingreso registrado.", "green")
         self.cargar_tabla()
 
     # ---------------------------------------------------------
-    # Cargar tabla de ingresos
+    # Cargar tabla
     # ---------------------------------------------------------
     def cargar_tabla(self):
         ingresos = [t for t in obtener_transacciones() if t.tipo == "ingreso"]
@@ -107,7 +199,8 @@ class IngresosScreen(ft.UserControl):
                 icon=ft.icons.DELETE,
                 tooltip="Eliminar",
                 icon_color="red",
-                on_click=lambda e, trans_id=t.id: self.confirmar_eliminar(trans_id),
+                data=t.id,
+                on_click=self.confirmar_eliminar,
             )
 
             self.tabla.rows.append(
@@ -115,19 +208,21 @@ class IngresosScreen(ft.UserControl):
                     cells=[
                         ft.DataCell(ft.Text(t.fecha)),
                         ft.DataCell(ft.Text(t.descripcion)),
-                        ft.DataCell(ft.Text(f"${t.monto:.0f}")),
+                        ft.DataCell(ft.Text(f"${t.monto:,.0f}")),
                         ft.DataCell(ft.Text(t.categoria_nombre or "—")),
                         ft.DataCell(btn_eliminar),
                     ]
                 )
             )
 
-        self.tabla.update()
+        self.update()
 
     # ---------------------------------------------------------
     # Confirmar eliminación
     # ---------------------------------------------------------
-    def confirmar_eliminar(self, trans_id: int):
+    def confirmar_eliminar(self, e):
+        trans_id = e.control.data
+
         dialogo = ConfirmDialog(
             mensaje="¿Desea eliminar este ingreso?",
             on_confirm=lambda: self.eliminar(trans_id),
@@ -138,31 +233,33 @@ class IngresosScreen(ft.UserControl):
 
     def eliminar(self, trans_id: int):
         eliminar_transaccion(trans_id)
-        self.page.snack_bar = ft.SnackBar(ft.Text("Ingreso eliminado."), bgcolor="orange")
-        self.page.snack_bar.open = True
-        self.page.update()
+        self._snack("Ingreso eliminado.", "orange")
         self.cargar_tabla()
 
     # ---------------------------------------------------------
-    # Render principal
+    # Exportar Excel
     # ---------------------------------------------------------
-    def build(self):
-        return ft.Column(
-            [
-                SectionTitle("Gestión de Ingresos"),
+    def exportar_excel(self, e):
+        ruta = os.path.join(tempfile.gettempdir(), "ingresos.xlsx")
+        exportar_transacciones_excel(ruta)
+        self.page.launch_url(ruta)
 
-                ft.Text("Registrar nuevo ingreso", size=18, weight="bold"),
-                self.fecha,
-                self.descripcion,
-                self.monto,
-                self.dropdown_categoria,
-                self.btn_guardar,
+    # ---------------------------------------------------------
+    # Exportar PDF
+    # ---------------------------------------------------------
+    def exportar_pdf(self, e):
+        ruta = os.path.join(tempfile.gettempdir(), "ingresos.pdf")
+        exportar_transacciones_pdf(ruta)
+        self.page.launch_url(ruta)
 
-                ft.Divider(),
-
-                ft.Text("Historial de ingresos", size=18, weight="bold"),
-                self.tabla,
-            ],
-            scroll=ft.ScrollMode.AUTO,
-            expand=True,
+    # ---------------------------------------------------------
+    # Snackbar
+    # ---------------------------------------------------------
+    def _snack(self, mensaje, color):
+        self.page.snack_bar = ft.SnackBar(
+            ft.Text(mensaje),
+            bgcolor=color,
+            duration=2000,
         )
+        self.page.snack_bar.open = True
+        self.page.update()

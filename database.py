@@ -1,8 +1,11 @@
-# database.py
 import sqlite3
 import os
 
-DB_PATH = "finanzas.db"
+# ============================================================
+#   RUTA ABSOLUTA FIJA A LA BASE DE DATOS
+# ============================================================
+
+DB_PATH = r"C:\Users\Santiago\Desktop\flet_finanzas_app\finanzas.db"
 
 
 # ============================================================
@@ -10,18 +13,18 @@ DB_PATH = "finanzas.db"
 # ============================================================
 
 def get_conn():
-    """Retorna una conexión a SQLite con filas tipo diccionario."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 # ============================================================
-#   CREACIÓN DE TABLAS (si no existen)
+#   CREACIÓN DE TABLAS
 # ============================================================
 
 def init_db():
-    """Crea todas las tablas necesarias para la app."""
+    print(">>> Inicializando base de datos en:", DB_PATH)
+
     conn = get_conn()
     cur = conn.cursor()
 
@@ -32,9 +35,6 @@ def init_db():
             nombre TEXT UNIQUE NOT NULL
         )
     """)
-
-    # Índice para búsquedas rápidas
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_categorias_nombre ON categorias(nombre)")
 
     # ------------------ TRANSACCIONES ------------------
     cur.execute("""
@@ -49,9 +49,6 @@ def init_db():
         )
     """)
 
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_transacciones_fecha ON transacciones(fecha)")
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_transacciones_tipo ON transacciones(tipo)")
-
     # ------------------ PRESUPUESTOS ------------------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS presupuestos (
@@ -61,8 +58,6 @@ def init_db():
             FOREIGN KEY (categoria_id) REFERENCES categorias(id)
         )
     """)
-
-    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_presupuesto_categoria ON presupuestos(categoria_id)")
 
     # ------------------ ALERTAS ------------------
     cur.execute("""
@@ -76,18 +71,19 @@ def init_db():
         )
     """)
 
-    cur.execute("CREATE INDEX IF NOT EXISTS idx_alertas_fecha ON alertas(fecha)")
-
     conn.commit()
     conn.close()
+    print(">>> Tablas listas.")
 
 
 # ============================================================
-#   RESETEAR BASE DE DATOS (opcional para desarrollo)
+#   RESETEAR BASE DE DATOS
 # ============================================================
 
 def reset_db():
-    """Elimina la base de datos y la crea de nuevo (solo para desarrollo)."""
     if os.path.exists(DB_PATH):
         os.remove(DB_PATH)
+        print(">>> Base de datos eliminada.")
+
     init_db()
+    print(">>> Base de datos nueva creada.")

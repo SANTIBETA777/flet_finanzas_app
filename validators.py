@@ -1,7 +1,5 @@
-# validators.py
 import re
 from datetime import datetime
-
 
 # ============================================================
 #   VALIDACIÓN DE MONTOS
@@ -10,17 +8,29 @@ from datetime import datetime
 def validar_monto(valor: str):
     """
     Valida que el monto sea numérico y mayor a 0.
-    Retorna (True, "") si es válido.
-    Retorna (False, "mensaje") si es inválido.
+    Acepta formatos como:
+    - 800
+    - 800.50
+    - 800.000
+    - 1.200.000
     """
+
     if not valor or valor.strip() == "":
         return False, "El monto no puede estar vacío."
 
-    # Solo números y punto decimal
-    if not re.match(r"^[0-9]+(\.[0-9]+)?$", valor):
+    # Quitar puntos de miles
+    valor_limpio = valor.replace(".", "")
+
+    # Debe ser número
+    if not re.match(r"^[0-9]+(\,[0-9]+)?$", valor_limpio.replace(",", ".")):
         return False, "El monto debe ser un número válido."
 
-    monto = float(valor)
+    # Convertir a float
+    try:
+        monto = float(valor_limpio.replace(",", "."))
+    except:
+        return False, "El monto debe ser un número válido."
+
     if monto <= 0:
         return False, "El monto debe ser mayor que 0."
 
@@ -32,9 +42,6 @@ def validar_monto(valor: str):
 # ============================================================
 
 def validar_fecha(fecha: str):
-    """
-    Valida que la fecha tenga formato YYYY-MM-DD.
-    """
     if not fecha:
         return False, "Debe seleccionar una fecha."
 
@@ -46,14 +53,10 @@ def validar_fecha(fecha: str):
 
 
 # ============================================================
-#   VALIDACIÓN DE TEXTO (DESCRIPCIÓN)
+#   VALIDACIÓN DE TEXTO
 # ============================================================
 
 def validar_texto(texto: str, minimo=3, maximo=200):
-    """
-    Valida longitud mínima y máxima.
-    No permite solo espacios.
-    """
     if not texto or texto.strip() == "":
         return False, "El texto no puede estar vacío."
 
@@ -81,12 +84,6 @@ def validar_categoria(cat_id):
 # ============================================================
 
 def validar_transaccion(fecha, descripcion, monto, tipo, categoria_id):
-    """
-    Valida todos los campos de una transacción.
-    Retorna (True, "") si todo está bien.
-    Retorna (False, "mensaje") si algo falla.
-    """
-
     ok, msg = validar_fecha(fecha)
     if not ok:
         return False, msg
@@ -102,7 +99,7 @@ def validar_transaccion(fecha, descripcion, monto, tipo, categoria_id):
     if tipo not in ("ingreso", "gasto"):
         return False, "Debe seleccionar un tipo válido."
 
-    # Solo validar categoría si es gasto
+    # Categoría solo obligatoria en gastos
     if tipo == "gasto":
         ok, msg = validar_categoria(categoria_id)
         if not ok:

@@ -1,5 +1,19 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+
+# SQLite database
 *.db
-*.sqlite
-*.log
+
+# Flet build cache
+build/
+dist/
+
+# VSCode
+.vscode/
+
+# Environment
+venv/
+.env

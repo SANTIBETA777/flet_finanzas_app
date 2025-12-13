@@ -16,7 +16,7 @@ from ui.components import (
 from validators import validar_monto
 
 
-class AlertasScreen(ft.UserControl):
+class AlertasScreen(ft.Column):
     """
     Pantalla de alertas y presupuestos:
     - Definir presupuesto por categoría
@@ -26,7 +26,7 @@ class AlertasScreen(ft.UserControl):
     """
 
     def __init__(self, page: ft.Page):
-        super().__init__()
+        super().__init__(scroll=ft.ScrollMode.AUTO, expand=True)
         self.page = page
 
         # Dropdown de categorías
@@ -58,10 +58,31 @@ class AlertasScreen(ft.UserControl):
             rows=[],
         )
 
-    # ---------------------------------------------------------
-    # Al montar la pantalla
-    # ---------------------------------------------------------
-    def did_mount(self):
+        # Layout principal
+        self.controls = [
+            SectionTitle("Sistema de Alertas y Presupuestos"),
+
+            ft.Text("Configurar presupuesto por categoría", size=18, weight="bold"),
+            self.dropdown_categoria,
+            self.campo_presupuesto,
+            ft.ElevatedButton(
+                "Guardar presupuesto",
+                icon=ft.icons.SAVE,
+                on_click=self.guardar_presu,
+            ),
+
+            ft.Divider(),
+
+            ft.Text("Presupuestos y consumo", size=18, weight="bold"),
+            self.tabla_presupuestos,
+
+            ft.Divider(),
+
+            ft.Text("Historial de alertas", size=18, weight="bold"),
+            self.tabla_alertas,
+        ]
+
+        # Cargar datos iniciales
         self.cargar_categorias()
         self.cargar_presupuestos()
         self.cargar_alertas()
@@ -190,34 +211,3 @@ class AlertasScreen(ft.UserControl):
             )
 
         self.tabla_alertas.update()
-
-    # ---------------------------------------------------------
-    # Render principal
-    # ---------------------------------------------------------
-    def build(self):
-        return ft.Column(
-            [
-                SectionTitle("Sistema de Alertas y Presupuestos"),
-
-                ft.Text("Configurar presupuesto por categoría", size=18, weight="bold"),
-                self.dropdown_categoria,
-                self.campo_presupuesto,
-                ft.ElevatedButton(
-                    "Guardar presupuesto",
-                    icon=ft.icons.SAVE,
-                    on_click=self.guardar_presu,
-                ),
-
-                ft.Divider(),
-
-                ft.Text("Presupuestos y consumo", size=18, weight="bold"),
-                self.tabla_presupuestos,
-
-                ft.Divider(),
-
-                ft.Text("Historial de alertas", size=18, weight="bold"),
-                self.tabla_alertas,
-            ],
-            scroll=ft.ScrollMode.AUTO,
-            expand=True,
-        )

@@ -169,3 +169,17 @@ def exportar_estado_cuenta_pdf(ruta="reportes/estado_cuenta.pdf"):
 
     c.save()
     return ruta
+
+
+# ============================================================
+#   FUNCIONES QUE FALTABAN PARA INGRESOSSCREEN
+# ============================================================
+
+def exportar_transacciones_excel(ruta):
+    """Exporta TODAS las transacciones a Excel (compatibilidad con IngresosScreen)."""
+    return exportar_historial_excel(ruta)
+
+
+def exportar_transacciones_pdf(ruta):
+    """Exporta TODAS las transacciones a PDF (compatibilidad con IngresosScreen)."""
+    return exportar_historial_pdf(ruta)
